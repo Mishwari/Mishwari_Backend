@@ -10,6 +10,9 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+
+
+import os
 from pathlib import Path
 from datetime import timedelta
 
@@ -27,7 +30,7 @@ SECRET_KEY = 'django-insecure-##58%te*9*nsa3k_^b*a-(@%qg16p7!3x$tbsnhfy#!m=un%33
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost','127.0.0.1','192.168.43.162','192.168.158.162','192.168.178.163','192.168.111.162']
+ALLOWED_HOSTS = ['localhost','127.0.0.1','mishwari.ye','driver.mishwari.ye','192.168.111.163','192.168.43.52','0.0.0.0']
 
 
 # Application definition
@@ -71,7 +74,7 @@ MIDDLEWARE = [
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://192.168.56.162:3000",  # Add your frontend domain here
+    "http://192.168.56.162:3000", 
 ]
 
 ROOT_URLCONF = 'mishwari_server.urls'
@@ -98,10 +101,23 @@ WSGI_APPLICATION = 'mishwari_server.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'Mishwari_DB',
+#         'USER': 'postgres',
+#         # 'PASSWORD': os.environ.get('PSQL_PASSWORD'),
+#         'PASSWORD': 'mishwari8080@2024',
+#         # 'HOST': 'db',  # Set to empty string for localhost.
+#         'PORT': '5432',           # Set to empty string for default.
+#     }
+# }
+
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': BASE_DIR / "db.sqlite3",
     }
 }
 
@@ -140,6 +156,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
+
 STATIC_URL = 'static/'
 
 
@@ -148,6 +170,7 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.BasicAuthentication',
+        
         'rest_framework_simplejwt.authentication.JWTAuthentication',
 
     ],

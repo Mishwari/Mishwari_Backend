@@ -21,7 +21,11 @@ city_choices = [
     ("مأرب","مأرب"),
     ("الحديدة","الحديدة"),
     ("إب","إب"),
-    ("البيضاء","البيضاء")
+    ("البيضاء","البيضاء"),
+    ("جعار","جعار"),
+    ("رضوم","رضوم"),
+    ("يريم","يريم"),
+    ("ذمار","ذمار")
 ]
 
 class Driver(models.Model):
@@ -49,17 +53,54 @@ class Driver(models.Model):
 class Trips(models.Model):
     pickup =models.CharField(max_length=16,null=False,blank=False,choices=city_choices)
     destination =models.CharField(max_length=16,null=False,blank=False,choices=city_choices)
-    path_road = models.CharField(max_length=16,null=True, blank=True, default="مسار غير معروف")
+    path_road = models.CharField(max_length=32,null=True, blank=True, default="مسار غير معروف")
     price = models.IntegerField(default=0)
     driver = models.ForeignKey(Driver,null=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True) 
     departure_time = models.DateTimeField(null=False,blank=False)
-    arrival_time = models.DateTimeField(null=False, blank=False)
+    arrival_time = models.DateTimeField(null=True, blank=True)
+    distance = models.FloatField(help_text="Distance in kilometers",default=0.0)
     trip_status = models.CharField(max_length=16, default="pending")
     available_seats = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.pickup}/{self.destination} - {self.created_at}"
     
+
+
+class SubTrips(models.Model):
+    trip = models.ForeignKey(Trips, null=False, on_delete=models.CASCADE, related_name='sub_trips')
+    pickup =models.CharField(max_length=16,null=False,blank=False,choices=city_choices)
+    destination =models.CharField(max_length=16,null=False,blank=False,choices=city_choices)
+    path_road = models.CharField(max_length=32,null=True, blank=True, default="مسار غير معروف")
+    price = models.IntegerField(default=0)
+    driver = models.ForeignKey(Driver,null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True) 
+    departure_time = models.DateTimeField(null=False,blank=False)
+    arrival_time = models.DateTimeField(null=True, blank=True)
+    distance = models.FloatField(help_text="Distance in kilometers",default=0.0)
+    trip_status = models.CharField(max_length=16, default="pending")
+    available_seats = models.IntegerField(null=True, blank=True)
+
+    def __str__(self):
+        return f"الرحلة ({self.trip.id}): {self.pickup} / {self.destination}  "
+
+class CityList(models.Model):
+    city = models.CharField(max_length=16,null=False,blank=False,unique=True,choices=city_choices)
+    latitude = models.DecimalField(max_digits=10,decimal_places=6)
+    longitude = models.DecimalField(max_digits=10,decimal_places=6)
+    proximity = models.FloatField(default=1.0, help_text="Proximity from the nearest point of the poly line")
+
+    class Meta: 
+        constraints = [
+            models.UniqueConstraint(fields=['latitude', 'longitude'], name='Unique Coordinates')
+        ]
+
+    def __str__(self):
+        return f"{self.city} coords: {self.latitude}, {self.longitude}"
     
+
+    @property
+    def coordinates(self):
+        return f"{self.latitude}, {self.longitude}"
     
