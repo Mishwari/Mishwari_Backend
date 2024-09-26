@@ -15,6 +15,13 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 import os
 from pathlib import Path
 from datetime import timedelta
+from decouple import config
+
+
+TWILLO_ACCOUNT_SID = config.get('TWILLO_ACCOUNT_SID')
+TWILLO_AUTH_TOKEN = config.get('TWILLO_AUTH_TOKEN')
+TWILLO_PHONE_NUMBER = config.get('TWILLO_PHONE_NUMBER')
+
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
