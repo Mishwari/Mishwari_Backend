@@ -30,7 +30,7 @@ SECRET_KEY = 'django-insecure-##58%te*9*nsa3k_^b*a-(@%qg16p7!3x$tbsnhfy#!m=un%33
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost','127.0.0.1','mishwari.ye','driver.mishwari.ye','192.168.111.163','192.168.43.52','0.0.0.0']
+ALLOWED_HOSTS = ['localhost','127.0.0.1','mishwari.ye','driver.mishwari.ye','oriented-ultimate-jackal.ngrok-free.app','172.29.240.1','0.0.0.0']
 
 
 # Application definition
@@ -45,11 +45,13 @@ INSTALLED_APPS = [
     
     # apps
     'mishwari_main_app',
+    'wallet',
 
     # frameworks
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
+    
 ]
 
 MIDDLEWARE = [
@@ -101,25 +103,29 @@ WSGI_APPLICATION = 'mishwari_server.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'Mishwari_DB',
-#         'USER': 'postgres',
-#         # 'PASSWORD': os.environ.get('PSQL_PASSWORD'),
-#         'PASSWORD': 'mishwari8080@2024',
-#         # 'HOST': 'db',  # Set to empty string for localhost.
-#         'PORT': '5432',           # Set to empty string for default.
-#     }
-# }
 
+STRIPE_SECRET_KEY = 'sk_test_51MeGOxSC6dNQSG02ZJTqMB7N4V8KCNz2JXTSQAqfwvux7seb89xSog1jOLwgtpkLj2eSDgwxWlPj4NTWF7QqsxAn00ww3lNDvB'  # Use your real secret key
+STRIPE_WEBHOOK_SECRET = 'whsec_WBv0wGyNzN8KKCGLoJNMIg1f5m6yBRV1'  # Use your real webhook secret key
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / "db.sqlite3",
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'Mishwari-DB',
+        'USER': 'postgres',
+        # 'PASSWORD': os.environ.get('PSQL_PASSWORD'),
+        # 'PASSWORD': 'mishwari8080@2024',
+        # 'HOST': 'db',  # Set to empty string for localhost.
+        'PORT': '5432',           # Set to empty string for default.
     }
 }
+
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / "db.sqlite3",
+#     }
+# }
 
 
 # Password validation
@@ -211,3 +217,5 @@ SIMPLE_JWT = {
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+FAST2SMS_API_KEY = ' vFACNEPbUJl9axs4kM0q6dIG2ez8jW5QncRgpoS7Yt3rKiBZhyvjlbmoRzI0cJ1eDA3tF6T2y8gn9Kp7'

@@ -1,26 +1,46 @@
+import time
 from django.shortcuts import render
 from django.contrib.auth.models import User
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+from django.conf import settings
+from django.db import transaction
+from django.core.cache import cache
+from django.core.exceptions import ObjectDoesNotExist
+
 from rest_framework import viewsets,status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny,IsAdminUser
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
+
+import stripe
 
 import googlemaps
 import polyline
-from rest_framework.decorators import action
 from shapely.geometry import Point, LineString
 from geopy.distance import geodesic
-from django.core.cache import cache
-from django.core.exceptions import ObjectDoesNotExist
 from datetime import timedelta
 
+# for payment 
+from .payment_gateways.stripe_payment_gateway import StripePaymentGateway
+from .payment_gateways.wallet_payment_gateway import WalletPaymentGateway
 
 
 
 
 
-from .serializers import UserSerializer,DriverSerializer,TripsSerializer,CombinedTripSerializer,CitiesSerializer
-from  .models import Driver, SubTrips,Trips,CityList
+
+from .serializers import (BookingSerializer2, UserSerializer,DriverSerializer,TripsSerializer,
+                          AllTripsSerializer,
+                          CombinedTripSerializer,
+                          CitiesSerializer,
+                          BookingTripSerializer,
+                        #   ,   BookingSerializer
+                          PassengerSerializer
+                          )
+from  .models import Driver, AllTrips,MainTrip,CityList,Seat,Booking,Passenger
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -39,6 +59,8 @@ class JwtUserView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # This line gets the user ID from the JWT token and returns the corresponding user
+        user = User.objects.filter(id=self.request.user.id).first()
+        print('user: ',user)
         return User.objects.filter(id=self.request.user.id)
 
 
@@ -63,8 +85,9 @@ class JwtDriverView(viewsets.ModelViewSet):
 
 
 
-class TripsView(viewsets.ModelViewSet):
-    serializer_class = TripsSerializer
+from django.shortcuts import get_object_or_404
+class AllTripsView(viewsets.ModelViewSet):
+    serializer_class = AllTripsSerializer
 
     def get_queryset(self):
         # queryset = Trips.objects.all()
@@ -72,17 +95,27 @@ class TripsView(viewsets.ModelViewSet):
         destination = self.request.query_params.get('destination', None)
 
         if pickup and destination:
-            queryset = Trips.objects.filter(pickup=pickup, destination=destination,trip_status='pending')
+            queryset = AllTrips.objects.filter(pickup__city=pickup, destination__city=destination,
+                                            #    trip_status='pending'
+                                               )
             return queryset
         else:
-            queryset = []
+            queryset = AllTrips.objects.none()
             return queryset
+        
+
+    def retrieve(self, request,pk=None):
+        qs = AllTrips.objects.all()
+        trip = get_object_or_404(qs, pk=pk)
+        serializer = AllTripsSerializer(trip, context={'request': request})
+        return Response(serializer.data)
         
     def get_permissions(self):
         if self.request.method in ['GET']:
             return [AllowAny()]
         return [IsAdminUser()]
     
+
 
 class TestGetView(viewsets.ViewSet):
     def list(self, request):
@@ -92,8 +125,8 @@ class TestGetView(viewsets.ViewSet):
 
         if pickup and destination:
         # Get all Trips and SubTrips
-            trips = Trips.objects.filter(pickup=pickup, destination=destination,trip_status='pending')
-            subtrips = SubTrips.objects.filter(pickup=pickup, destination=destination,trip_status='pending')
+            trips = MainTrip.objects.filter(pickup=pickup, destination=destination,trip_status='pending')
+            subtrips = AllTrips.objects.filter(pickup=pickup, destination=destination,trip_status='pending')
 
         # Combine querysets
             combined_queryset = list(trips) + list(subtrips)
@@ -105,10 +138,29 @@ class TestGetView(viewsets.ViewSet):
         print("data: ", serializer.data)
         return Response(serializer.data)
     
+
+    def retrieve(self, request,pk=None):
+        type =  self.request.query_params.get('type', None)
+        if type == 'all':
+            qs = AllTrips.objects.all()
+            trip = get_object_or_404(qs, pk=pk) # "detail": "Not found." # in case no object
+            serializer = CombinedTripSerializer(trip)
+        elif type == 'main':
+            qs = MainTrip.objects.all()
+            trip = get_object_or_404(qs, pk=pk)
+            serializer = CombinedTripSerializer(trip)
+        else:
+            return Response({"message":f"Invalid type: '{type}'"},status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(serializer.data)
+    
     def get_permissions(self):
         if self.request.method in ['GET']:
             return [AllowAny()]
         return [IsAdminUser()]
+    
+
+    ################################################################
     
 class CitiesView(viewsets.ModelViewSet):
     queryset = CityList.objects.all()
@@ -130,7 +182,7 @@ class DriverTripView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         # This line gets the user ID from the JWT token and returns the corresponding user
-        return Trips.objects.filter(driver__user=self.request.user.id)
+        return MainTrip.objects.filter(driver__user=self.request.user.id)
     
 
 
@@ -310,7 +362,7 @@ class RouteViewSet(viewsets.ViewSet):
 
 
 class TripsViewSet(viewsets.ModelViewSet):
-    queryset = Trips.objects.all()
+    queryset = MainTrip.objects.all()
     serializer_class = TripsSerializer
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
@@ -365,8 +417,8 @@ class TripsViewSet(viewsets.ModelViewSet):
 
         for i in range(len(all_stops) - 1): # 0,1,2,3
             for j in range(i + 1, len(all_stops)): # i = 0 : j= [1,2,3], i = 1 : j= [2,3] , i = 2 : j= [3]
-                if i == 0 and j == len(all_stops) - 1:  # Skip the main trip
-                    continue
+                # if i == 0 and j == len(all_stops) - 1:  # Skip the main trip
+                #     continue
 
                 subtrip_distance = cumulative_distances[j] - cumulative_distances[i]
                 subtrip_duration = cumulative_durations[j] - cumulative_durations[i]
@@ -376,7 +428,7 @@ class TripsViewSet(viewsets.ModelViewSet):
                 departure_time = trip.departure_time + timedelta(seconds=cumulative_durations[i])
                 arrival_time = departure_time + timedelta(seconds=subtrip_duration)
 
-                SubTrips.objects.create(
+                AllTrips.objects.create(
                     trip=trip,
                     pickup=all_stops[i],
                     destination=all_stops[j],
@@ -395,5 +447,149 @@ class TripsViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     def get_queryset(self):
         # This line gets the user ID from the JWT token and returns the corresponding user
-        return Trips.objects.filter(driver__user=self.request.user.id)
+        return MainTrip.objects.filter(driver__user=self.request.user.id)
+    
+# Booking Views
+stripe_api_key = 'stripe_url_from_settings'
+class BookingViewSet(viewsets.ModelViewSet):
+    
+    queryset = Booking.objects.all()
+    # time.sleep(5)
+    serializer_class = BookingSerializer2
 
+   
+    def create(self, request, *args, **kwargs):
+        # time.sleep(5)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        payment_method = request.data.get('payment_method', 'stripe')
+        gateway = None
+
+        if payment_method == 'stripe':
+            gateway = StripePaymentGateway()
+        elif payment_method == 'wallet':
+            gateway = WalletPaymentGateway()
+        elif payment_method == 'cash':
+            gateway = None
+        else:
+            raise ValidationError('Unsupported payment method')
+
+        try:
+            with transaction.atomic():
+                booking_data = serializer.validated_data
+                booking_data['user'] = request.user
+
+                if 'trip' in booking_data and hasattr(booking_data['trip'], 'price'):
+                    trip_price = booking_data['amount']
+                else:
+                    raise ValidationError('Trip information is incomplete or invalid.')
+
+                booking = serializer.save(user=request.user)
+                booking_details = {
+                    'user': booking_data['user'],
+                    'trip': booking_data['trip'],
+                    'amount': booking_data['amount'],
+                    'booking_id': booking.id
+                }
+
+                # if trip_price != booking.
+
+
+                if payment_method == 'stripe':
+                    
+                    payment_url = gateway.initiate_payment(booking_details)
+                    headers = self.get_success_headers(serializer.data)
+                    return Response({'payment_url': payment_url, 'booking_id': booking.id}, status=status.HTTP_202_ACCEPTED, headers=headers)
+                elif payment_method == 'wallet':
+                    gateway.initiate_payment(booking_details)
+                    booking.status = 'active'
+                    booking.is_paid = True
+                    booking.payment_method = 'wallet'
+                    booking.save()
+                    return Response({'message': 'Payment successful using wallet', 'booking': serializer.data}, status=status.HTTP_200_OK)
+                elif payment_method == 'cash':
+                    booking.status = 'pending'
+                    booking.save()
+                    headers = self.get_success_headers(serializer.data)
+                    return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+                else:
+                    headers = self.get_success_headers(serializer.data)
+                    return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        except ValidationError as e:
+            raise e
+        except Exception as e:
+            return Response({'error': 'An unexpected error occurred'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['post'], url_path='cancel')
+    def cancel_booking(self, request, pk=None):
+        print("Cancelling")
+        booking = self.get_object()
+        if booking.status == 'cancelled':
+            return Response({'error': 'Booking is already cancelled.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        booking.status = 'cancelled'
+        booking.save()
+
+        # Release all seats associated with this booking
+        seats = Seat.objects.filter(bookingpassenger__booking=booking)
+        for seat in seats:
+            seat.is_booked = False
+            seat.save()
+
+        return Response({'message': 'Booking cancelled successfully.'}, status=status.HTTP_200_OK)
+    
+@csrf_exempt
+def stripe_webhook(request):
+    payload = request.body
+    print('received hook', payload)
+    sig_header = request.META['HTTP_STRIPE_SIGNATURE']
+    endpoint_secret = settings.STRIPE_WEBHOOK_SECRET
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, endpoint_secret
+        )
+    except ValueError as e:
+        return JsonResponse({'error': str(e)}, status=400)
+    except stripe.error.SignatureVerificationError as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+    if event['type'] == 'checkout.session.completed':
+        print('session completed!!!')
+        session = event['data']['object']
+        handle_successful_payment(session)
+
+    return JsonResponse({'status': 'success'}, status=200)
+
+def handle_successful_payment(session):
+    try:
+        booking_id = session['metadata']['booking_id']
+        print('booking_id:', booking_id)
+        print('type of booking_id', type(booking_id))
+        booking = Booking.objects.get(id=int(booking_id))
+        booking.is_paid = True
+        booking.status = 'active'
+        booking.save()
+    except Booking.DoesNotExist:
+        pass
+    
+
+
+
+
+class BookingTripsViewSet(viewsets.ModelViewSet):
+    queryset = AllTrips.objects.all()
+    serializer_class = BookingTripSerializer
+
+
+class PassengersViewSet(viewsets.ModelViewSet):
+    serializer_class = PassengerSerializer
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+
+    def get_queryset(self):
+        # This line gets the user ID from the JWT token and returns the corresponding user
+        passengers = Passenger.objects.filter(user=self.request.user.id)
+        print('passengers: ',passengers)
+        return Passenger.objects.filter(user=self.request.user.id)
