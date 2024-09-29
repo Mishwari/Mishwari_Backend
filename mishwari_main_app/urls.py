@@ -11,7 +11,10 @@ from .views import (
     )
     
 
-from .allviews.authView import (MobileLoginView, whatsapp_webhook,ProfileView)
+from .allviews.authView import (MobileLoginView, 
+                                whatsapp_webhook,
+                                # ProfileView
+                                )
 
 router = routers.DefaultRouter()
 # router.register(r"users", UserViewSet)
@@ -31,7 +34,7 @@ router.register(r"booking",BookingViewSet,basename="booking")
 router.register(r"seats",BookingTripsViewSet,basename="seats")
 router.register(r"passengers",PassengersViewSet, basename="user-passengers")
 router.register(r"mobile-login",MobileLoginView, basename="mobile-login")
-router.register(r"profile",ProfileView,basename="profile")
+# router.register(r"profile",ProfileView,basename="profile")
 
 
 
@@ -40,7 +43,7 @@ urlpatterns = [
     path('', include(router.urls)),
     path('api-auth/', include('rest_framework.urls')),    # to login in rest_framework
     path('webhook/stripe/', stripe_webhook, name='stripe-webhook'),
-    path('whatsapp-response/', whatsapp_webhook, name='whatsapp-response'),
+    path('whatsapp-response/', whatsapp_webhook.as_view(), name='whatsapp-response'),
 
 ]
 
